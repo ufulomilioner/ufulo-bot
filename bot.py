@@ -1,62 +1,56 @@
 import os
-import asyncio
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
+from threading import Thread
+from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes
 
-TOKEN = os.environ.get("BOT_TOKEN")
+# --- 1. RENDER KEEP-ALIVE SERVER ---
+app = Flask('')
 
-FOOTBALL_LINK = "https://t.me/+aTRN3nmrJ7tmNTlk"
-UFC_LINK = "https://t.me/+Dw281fuKJWljM2E0"
+@app.route('/')
+def home():
+    return "Bot is alive!"
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
+def run():
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
 
-def run_health_check_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    server.serve_forever()
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
+# --- 2. TELEGRAM BOT HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "UFULO MILIONERI-ს ოფიციალური ბოტი 🚀\n"
-        "მიიღე ექსკლუზიური წვდომა ფეხბურთისა და UFC-ს დახურულ არხებზე.\n\n"
-        "სპონსორი: Fastoo ⚡\n\n"
-        "აირჩიე სასურველი კატეგორია:"
-    )
     keyboard = [
-        [
-            InlineKeyboardButton("⚽ ფეხბურთი", callback_data="football"),
-            InlineKeyboardButton("🥊 UFC", callback_data="ufc"),
-        ]
+        [InlineKeyboardButton("🥊 UFC Stream", callback_data='ufc')],
+        [InlineKeyboardButton("⚽ Football Stream", callback_data='football')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(text, reply_markup=reply_markup)
+    await update.message.reply_text('აირჩიე სტრიმი:', reply_markup=reply_markup)
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "football":
-        await query.message.reply_text(f"შემოგვიერთდი ფეხბურთის ჯგუფში:\n{FOOTBALL_LINK}")
-    elif query.data == "ufc":
-        await query.message.reply_text(f"შემოგვიერთდი UFC-ს ჯგუფში:\n{UFC_LINK}")
+    ufc_link = os.environ.get("UFC_LINK", "ლინკი არ არის დამატებული")
+    football_link = os.environ.get("FOOTBALL_LINK", "ლინკი არ არის დამატებული")
 
-async def main():
-    threading.Thread(target=run_health_check_server, daemon=True).start()
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_click))
-    
-    async with app:
-        await app.start()
-        await app.updater.start_polling()
-        while True:
-            await asyncio.sleep(3600)
+    if query.data == 'ufc':
+        await query.message.reply_text(f"🥊 UFC Live Link:\n{ufc_link}")
+    elif query.data == 'football':
+        await query.message.reply_text(f"⚽ Football Live Link:\n{football_link}")
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# --- 3. MAIN EXECUTION ---
+if __name__ == '__main__':
+    # რთავს ვებ-სერვერს Render-ისთვის
+    keep_alive()
+
+    # რთავს Telegram ბოტს
+    token = os.environ.get("BOT_TOKEN")
+    if token:
+        application = ApplicationBuilder().token(token).build()
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(CallbackQueryHandler(button_click))
+        application.run_polling()
+    else:
+        print("Error: BOT_TOKEN is missing in Environment Variables!")
