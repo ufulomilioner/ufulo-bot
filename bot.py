@@ -35,8 +35,9 @@ Thread(target=run_flask, daemon=True).start()
 # -------------------------------------------------------------
 TOKEN = os.environ.get("BOT_TOKEN")
 
-FOOTBALL_LINK = "https://t.me/+aTRN3nmrJ7tmNTlk"
-UFC_LINK = "https://t.me/+Dw281fuKJWljM2E0"
+# შენი განახლებული ლინკები
+FOOTBALL_LINK = "https://t.me/+w2IUjhPKSOw4OTY0"
+UFC_LINK = "https://t.me/+w2IUjhPKSOw4OTY0"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
