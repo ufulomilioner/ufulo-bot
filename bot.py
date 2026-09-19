@@ -1,56 +1,95 @@
 import os
+import logging
 from threading import Thread
 from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.error import BadRequest
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+)
 
-# --- 1. RENDER KEEP-ALIVE SERVER ---
-app = Flask('')
+# -------------------------------------------------------------
+# 1. Flask ვებ-სერვერი (Render / UptimeRobot-ისთვის)
+# -------------------------------------------------------------
+server = Flask("")
 
-@app.route('/')
+
+@server.route("/")
 def home():
-    return "Bot is alive!"
+  return "Bot is live and running!", 200
 
-def run():
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+def run_flask():
+  port = int(os.environ.get("PORT", 8080))
+  server.run(host="0.0.0.0", port=port)
 
-# --- 2. TELEGRAM BOT HANDLERS ---
+
+# გააშვი Flask ცალკე ნაკადში (Thread)
+Thread(target=run_flask, daemon=True).start()
+
+# -------------------------------------------------------------
+# 2. ტელეგრამ ბოტის კონფიგურაცია
+# -------------------------------------------------------------
+TOKEN = os.environ.get("BOT_TOKEN")
+
+FOOTBALL_LINK = "https://t.me/+aTRN3nmrJ7tmNTlk"
+UFC_LINK = "https://t.me/+Dw281fuKJWljM2E0"
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🥊 UFC Stream", callback_data='ufc')],
-        [InlineKeyboardButton("⚽ Football Stream", callback_data='football')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('აირჩიე სტრიმი:', reply_markup=reply_markup)
+  text = (
+      "UFULO MILIONERI-ს ოფიციალური ბოტი 🚀\n"
+      "მიიღე ექსკლუზიური წვდომა ფეხბურთისა და UFC-ს დახურულ"
+      " არხებზე.\n\n"
+      "სპონსორი: Fastoo ⚡\n\n"
+      "აირჩიე სასურველი კატეგორია:"
+  )
+  keyboard = [
+      [
+          InlineKeyboardButton("⚽ ფეხბურთი", callback_data="football"),
+          InlineKeyboardButton("🥊 UFC", callback_data="ufc"),
+      ]
+  ]
+  reply_markup = InlineKeyboardMarkup(keyboard)
+  await update.message.reply_text(text, reply_markup=reply_markup)
+
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+  query = update.callback_query
+
+  # 1. უსაფრთხო პასუხი ღილაკზე (Timeout ერორი რომ აირიდო)
+  try:
     await query.answer()
-
-    ufc_link = os.environ.get("UFC_LINK", "ლინკი არ არის დამატებული")
-    football_link = os.environ.get("FOOTBALL_LINK", "ლინკი არ არის დამატებული")
-
-    if query.data == 'ufc':
-        await query.message.reply_text(f"🥊 UFC Live Link:\n{ufc_link}")
-    elif query.data == 'football':
-        await query.message.reply_text(f"⚽ Football Live Link:\n{football_link}")
-
-# --- 3. MAIN EXECUTION ---
-if __name__ == '__main__':
-    # რთავს ვებ-სერვერს Render-ისთვის
-    keep_alive()
-
-    # რთავს Telegram ბოტს
-    token = os.environ.get("BOT_TOKEN")
-    if token:
-        application = ApplicationBuilder().token(token).build()
-        application.add_handler(CommandHandler('start', start))
-        application.add_handler(CallbackQueryHandler(button_click))
-        application.run_polling()
+  except BadRequest as e:
+    if "Query is too old" in str(e):
+      pass  # ვადაგასულ მოთხოვნას უბრალოდ გაატარებს კრაშის გარეშე
     else:
-        print("Error: BOT_TOKEN is missing in Environment Variables!")
+      raise e
+
+  # 2. ბოტის ლოგიკა
+  if query.data == "football":
+    await query.message.reply_text(
+        f"შემოგვიერთდი ფეხბურთის ჯგუფში:\n{FOOTBALL_LINK}"
+    )
+  elif query.data == "ufc":
+    await query.message.reply_text(f"შემოგვიერთდი UFC-ს ჯგუფში:\n{UFC_LINK}")
+
+
+def main():
+  if not TOKEN:
+    print("ERROR: BOT_TOKEN Environment Variable is missing!")
+    return
+
+  app = Application.builder().token(TOKEN).build()
+  app.add_handler(CommandHandler("start", start))
+  app.add_handler(CallbackQueryHandler(button_click))
+
+  # drop_pending_updates=True ასუფთავებს ძველ დაგროვილ ღილაკებს ჩართვისას
+  app.run_polling(drop_pending_updates=True)
+
+
+if __name__ == "__main__":
+  main()
